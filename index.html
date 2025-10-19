@@ -595,12 +595,28 @@
                     database.ref('users/' + deviceId).set({ name: deviceId, deviceId: deviceId });
                 }
 
+                // Normalize incoming prediction field names. The ESP32 sketch writes
+                // `co_pred_1h` (1-hour prediction). Older or other senders may use
+                // `prediction`. Prefer `co_pred_1h` when present.
+                const predictedRaw = (sensorData && sensorData.co_pred_1h !== undefined && sensorData.co_pred_1h !== null)
+                    ? sensorData.co_pred_1h
+                    : (sensorData && sensorData.prediction !== undefined && sensorData.prediction !== null)
+                        ? sensorData.prediction
+                        : null;
+
+                // Coerce to number when possible; otherwise use null to indicate no prediction
+                let predictedValue = null;
+                if (predictedRaw !== null) {
+                    const num = Number(predictedRaw);
+                    predictedValue = (isNaN(num) ? null : num);
+                }
+
                 const newData = {
                     co: sensorData.co,
                     temp: sensorData.temp,
                     humidity: sensorData.humidity,
                     timestamp: sensorData.timestamp,
-                    prediction: sensorData.prediction
+                    prediction: predictedValue
                 };
                 user.currentData = newData;
                 user.history.push(newData);
