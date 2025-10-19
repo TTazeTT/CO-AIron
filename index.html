@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CO-AIron - Environmental Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase Apps -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <!-- Firebase Realtime Database -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --primary-color: #4CAF50;
+            --secondary-color: #03A9F4;
+            --warning-color: #FFC107;
+            --danger-color: #F44336;
+            --border-color: #333;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        h1 {
+            font-family: 'Pacifico', cursive;
+            color: var(--primary-color);
+            font-size: 3.5rem;
+            margin-bottom: 8px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            padding: 24px;
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            margin-bottom: 32px;
+            border: 1px solid var(--border-color);
+        }
+
+        .control-group {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .control-group h3 {
+            margin-top: 0;
+            color: var(--secondary-color);
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 12px;
+            align-items: center;
+        }
+
+        label {
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            background-color: #333;
+            border: 1px solid #555;
+            color: var(--text-color);
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #45a049;
+        }
+
+        .btn-secondary {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: #0288d1;
+        }
+
+        #user-dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 24px;
+        }
+
+        .user-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .user-card.status-normal { border-left: 5px solid var(--primary-color); }
+        .user-card.status-warning { border-left: 5px solid var(--warning-color); background-color: #433613; }
+        .user-card.status-danger { border-left: 5px solid var(--danger-color); background-color: #441c1c; }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .user-name {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .device-id {
+            font-size: 0.8rem;
+            color: #aaa;
+        }
+
+        .sensor-data {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .sensor-reading .value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        .sensor-reading .label {
+            font-size: 0.9rem;
+            color: #bbb;
+        }
+        .co .value { color: var(--primary-color); }
+        .temp .value { color: var(--secondary-color); }
+        .humidity .value { color: #8c6eff; }
+
+        .user-card.status-warning .co .value { color: var(--warning-color); }
+        .user-card.status-danger .co .value { color: var(--danger-color); }
+
+        .chart-container {
+            margin-bottom: 20px;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 12px;
+        }
+        .prediction-display {
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .prediction-display span[data-value="prediction_text"] {
+            font-weight: bold;
+            color: var(--warning-color);
+        }
+        .prediction-info {
+            font-size: 0.8rem;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Sentinel Shield</h1>
+            <p>Real-time Air Quality Monitoring</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <h3><i class="icon"></i> Add New User</h3>
+                <div class="form-grid">
+                    <label for="new-user-name">Name:</label>
+                    <input type="text" id="new-user-name" placeholder="e.g., John Doe">
+                    <label for="new-device-id">Device ID:</label>
+                    <input type="text" id="new-device-id" placeholder="e.g., ESP32-A1B2">
+                    <div></div>
+                    <button id="add-user-btn" class="btn-primary">Add User</button>
+                </div>
+            </div>
+            <div class="control-group">
+                <h3><i class="icon"></i> CO Alert Thresholds</h3>
+                <div class="form-grid">
+                    <label for="warning-threshold">Warning (PPM):</label>
+                    <input type="number" id="warning-threshold" value="25">
+                    <label for="danger-threshold">Danger (PPM):</label>
+                    <input type="number" id="danger-threshold" value="50">
+                    <div></div>
+                    <button id="update-thresholds-btn" class="btn-secondary">Update</button>
+                </div>
+            </div>
+        </div>
+
+        <main id="user-dashboard"></main>
+    </div>
+
+    <script>
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAh3JSDTiKaae5He8InAlgxSTvOKv6MBdc",
+            authDomain: "esp32-weldwell-01.firebaseapp.com",
+            databaseURL: "https://esp32-weldwell-01-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "esp32-weldwell-01",
+            storageBucket: "esp32-weldwell-01.firebasestorage.app",
+            messagingSenderId: "147995342502",
+            appId: "1:147995342502:web:8d33fddc8e2fad341be667"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const userDashboard = document.getElementById('user-dashboard');
+            const addUserBtn = document.getElementById('add-user-btn');
+            const newUserNameInput = document.getElementById('new-user-name');
+            const newDeviceIdInput = document.getElementById('new-device-id');
+            const updateThresholdsBtn = document.getElementById('update-thresholds-btn');
+            const warningThresholdInput = document.getElementById('warning-threshold');
+            const dangerThresholdInput = document.getElementById('danger-threshold');
+
+            let users = {};
+            let charts = {};
+            let alertThresholds = {
+                warning: 25,
+                danger: 50
+            };
+
+            const MAX_DATA_POINTS = 30;
+
+            // --- User Management ---
+            
+            function addUser(name, deviceId) {
+                if (!name || !deviceId) {
+                    alert('Please provide both a name and a device ID.');
+                    return;
+                }
+                if (users[deviceId]) {
+                    alert('A user with this Device ID already exists.');
+                    return;
+                }
+
+                const newUser = {
+                    id: 'user-' + Date.now(),
+                    name,
+                    deviceId,
+                    history: [],
+                    currentData: { co: 0, temp: 0, humidity: 0, timestamp: Date.now() }
+                };
+                
+                // Optimistically add and render the user
+                users[deviceId] = newUser;
+                renderUserCard(newUser);
+
+                // Add user to Firebase
+                database.ref('users/' + deviceId).set({
+                    name: name,
+                    deviceId: deviceId
+                });
+
+                newUserNameInput.value = '';
+                newDeviceIdInput.value = '';
+            }
+
+            function renameUser(deviceId) {
+                const user = users[deviceId];
+                if (!user) return;
+
+                const newName = prompt(`Enter new name for ${user.name}:`, user.name);
+                if (newName && newName.trim() !== '') {
+                    user.name = newName.trim();
+                    document.querySelector(`#${user.id} .user-name`).textContent = user.name;
+                    // Update user name in Firebase
+                    database.ref('users/' + deviceId).update({
+                        name: newName.trim()
+                    });
+                }
+            }
+
+            // --- Data Handling ---
+            function getStatus(coLevel) {
+                if (coLevel >= alertThresholds.danger) return 'danger';
+                if (coLevel >= alertThresholds.warning) return 'warning';
+                return 'normal';
+            }
+
+            function exportToCSV(deviceId) {
+                const user = users[deviceId];
+                if (!user || user.history.length === 0) {
+                    alert('No data to export.');
+                    return;
+                }
+
+                let csvContent = "data:text/csv;charset=utf-8,";
+                csvContent += "Timestamp,CO (PPM),Temperature (C),Humidity (%),Status,Prediction
+";
+
+                user.history.forEach(record => {
+                    const timestamp = new Date(record.timestamp).toLocaleString();
+                    const status = getStatus(record.co);
+                    const prediction = (record.prediction !== undefined && record.prediction !== null) ? record.prediction.toFixed(2) : "N/A";
+                    const row = [timestamp, record.co, record.temp, record.humidity, status, prediction].join(",");
+                    csvContent += row + "
+";
+                });
+
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", `${user.name}_sensor_history.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+
+            // --- Rendering ---
+            function renderUserCard(user) {
+                const card = document.createElement('div');
+                card.className = 'user-card status-normal';
+                card.id = user.id;
+
+                card.innerHTML = `
+                    <div class="card-header">
+                        <div>
+                            <div class="user-name">${user.name}</div>
+                            <div class="device-id">ID: ${user.deviceId}</div>
+                        </div>
+                    </div>
+                    <div class="sensor-data">
+                        <div class="sensor-reading co">
+                            <div class="value" data-value="co">0.00</div>
+                            <div class="label">CO (PPM)</div>
+                        </div>
+                        <div class="sensor-reading temp">
+                            <div class="value" data-value="temp">0.0</div>
+                            <div class="label">Temp (°C)</div>
+                        </div>
+                        <div class="sensor-reading humidity">
+                            <div class="value" data-value="humidity">0</div>
+                            <div class="label">Humidity (%)</div>
+                        </div>
+                    </div>
+                    <div class="prediction-display">
+                        Prediction: <span data-value="prediction_text">N/A</span>
+                        <div class="prediction-info">Prediction (Next 30m - 1hr)</div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chart-${user.id}"></canvas>
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn-secondary rename-btn">Rename</button>
+                        <button class="btn-primary export-btn">Export CSV</button>
+                    </div>
+                `;
+
+                userDashboard.appendChild(card);
+                
+                card.querySelector('.rename-btn').addEventListener('click', () => renameUser(user.deviceId));
+                card.querySelector('.export-btn').addEventListener('click', () => exportToCSV(user.deviceId));
+
+                createChart(user);
+            }
+
+            function updateUserCard(user) {
+                const card = document.getElementById(user.id);
+                if (!card) return;
+
+                card.querySelector('[data-value="co"]').textContent = user.currentData.co.toFixed(2);
+                card.querySelector('[data-value="temp"]').textContent = user.currentData.temp.toFixed(1);
+                card.querySelector('[data-value="humidity"]').textContent = Math.round(user.currentData.humidity);
+
+                const predictionText = card.querySelector('[data-value="prediction_text"]');
+                if (user.currentData.prediction !== undefined && user.currentData.prediction !== null) {
+                    predictionText.textContent = user.currentData.prediction.toFixed(2) + " PPM";
+                } else {
+                    predictionText.textContent = "N/A";
+                }
+
+                const status = getStatus(user.currentData.co);
+                card.className = `user-card status-${status}`;
+            }
+
+            // --- Charting ---
+            function createChart(user) {
+                const ctx = document.getElementById(`chart-${user.id}`).getContext('2d');
+                charts[user.deviceId] = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'CO (PPM)',
+                            data: [],
+                            borderColor: '#4CAF50',
+                            backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            pointRadius: 0
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { color: '#999' },
+                                grid: { color: '#333' }
+                            },
+                            x: {
+                                ticks: { display: false },
+                                grid: { display: false }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+            }
+
+            function updateChart(user) {
+                const chart = charts[user.deviceId];
+                if (!chart) return;
+
+                const labels = user.history.map(d => new Date(d.timestamp).toLocaleTimeString());
+                const data = user.history.map(d => d.co);
+
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = data;
+                
+                const pointRadii = user.history.map(d => (d.prediction !== undefined && d.prediction !== null) ? 5 : 0);
+                const pointColors = user.history.map(d => (d.prediction !== undefined && d.prediction !== null) ? 'rgba(255, 99, 132, 1)' : 'rgba(0, 0, 0, 0)');
+                
+                chart.data.datasets[0].pointRadius = pointRadii;
+                chart.data.datasets[0].pointBackgroundColor = pointColors;
+                chart.data.datasets[0].pointBorderColor = pointColors;
+
+                const status = getStatus(user.currentData.co);
+                let borderColor = '#4CAF50'; // Normal
+                if (status === 'warning') borderColor = '#FFC107';
+                if (status === 'danger') borderColor = '#F44336';
+                chart.data.datasets[0].borderColor = borderColor;
+                
+                chart.update('none');
+            }
+
+            // --- Event Listeners ---
+            
+            addUserBtn.addEventListener('click', () => {
+                addUser(newUserNameInput.value.trim(), newDeviceIdInput.value.trim());
+            });
+
+            updateThresholdsBtn.addEventListener('click', () => {
+                const newWarning = parseFloat(warningThresholdInput.value);
+                const newDanger = parseFloat(dangerThresholdInput.value);
+
+                if (isNaN(newWarning) || isNaN(newDanger) || newWarning < 0 || newDanger < 0) {
+                    alert('Please enter valid, non-negative numbers for thresholds.');
+                    return;
+                }
+                if (newWarning >= newDanger) {
+                    alert('Warning threshold must be less than the danger threshold.');
+                    return;
+                }
+                alertThresholds.warning = newWarning;
+                alertThresholds.danger = newDanger;
+                alert('Thresholds updated!');
+            });
+
+            // --- Firebase Listeners ---
+
+            // This function handles new data for a device, updating its card and chart.
+            function handleDataUpdate(snapshot) {
+                const deviceId = snapshot.key;
+                const sensorData = snapshot.val();
+                let user = users[deviceId];
+
+                // If data arrives for a device we don't know, create it automatically.
+                if (!user) {
+                    const newUser = {
+                        id: 'user-' + Date.now(),
+                        name: deviceId, // Default name is the device ID
+                        deviceId: deviceId,
+                        history: [],
+                        currentData: { co: 0, temp: 0, humidity: 0, timestamp: Date.now() }
+                    };
+                    users[deviceId] = newUser;
+                    renderUserCard(newUser);
+                    user = newUser; // Assign to user so the rest of the function works
+
+                    // Also add this new user to Firebase so it's persisted
+                    database.ref('users/' + deviceId).set({ name: deviceId, deviceId: deviceId });
+                }
+
+                const newData = {
+                    co: sensorData.co,
+                    temp: sensorData.temp,
+                    humidity: sensorData.humidity,
+                    timestamp: sensorData.timestamp,
+                    prediction: sensorData.prediction
+                };
+                user.currentData = newData;
+                user.history.push(newData);
+                if (user.history.length > MAX_DATA_POINTS) {
+                    user.history.shift();
+                }
+                updateUserCard(user);
+                updateChart(user);
+            }
+
+            const usersRef = database.ref('users');
+            usersRef.on('child_added', (snapshot) => {
+                const deviceId = snapshot.key;
+                const userData = snapshot.val();
+                if (!users[deviceId]) {
+                    const newUser = {
+                        id: 'user-' + Date.now(),
+                        name: userData.name,
+                        deviceId: deviceId,
+                        history: [],
+                        currentData: { co: 0, temp: 0, humidity: 0, timestamp: Date.now() }
+                    };
+                    users[deviceId] = newUser;
+                    renderUserCard(newUser);
+
+                    // After creating a card, immediately fetch its latest data point.
+                    // This makes the card populate with data instantly.
+                    database.ref('data/' + deviceId).get().then((dataSnapshot) => {
+                        if (dataSnapshot.exists()) {
+                            // Re-use our data handling logic by faking a snapshot object
+                            handleDataUpdate({ key: deviceId, val: () => dataSnapshot.val() });
+                        }
+                    });
+                }
+            });
+
+            const dataRef = database.ref('data');
+            // When data is first added OR when it changes, update the dashboard.
+            dataRef.on('child_added', handleDataUpdate);
+            dataRef.on('child_changed', handleDataUpdate);
+        });
+    </script>
+
+</body>
+</html>
