@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CO-AIron - Environmental Monitor</title>
+    <title>CO-AIron</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
@@ -202,7 +202,7 @@
 
     <div class="container">
         <header>
-            <h1>Sentinel Shield</h1>
+            <h1>CO-AIron</h1>
             <p>Real-time Air Quality Monitoring</p>
         </header>
 
@@ -288,9 +288,17 @@
                     currentData: { co: 0, temp: 0, humidity: 0, timestamp: Date.now() }
                 };
                 
-                // Optimistically add and render the user
-                users[deviceId] = newUser;
-                renderUserCard(newUser);
+                try {
+                    // Optimistically add and render the user
+                    users[deviceId] = newUser;
+                    renderUserCard(newUser);
+                } catch (e) {
+                    alert('An error occurred while adding the user card. Please check the console for details.');
+                    console.error(e);
+                    // remove the user from the local cache if rendering fails
+                    delete users[deviceId]; 
+                    return; // stop execution
+                }
 
                 // Add user to Firebase
                 database.ref('users/' + deviceId).set({
