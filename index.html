@@ -179,6 +179,12 @@
         .chart-container {
             margin-bottom: 20px;
         }
+        .chart-title {
+            font-weight: bold;
+            margin: 8px 0;
+            color: var(--secondary-color);
+            font-size: 0.95rem;
+        }
 
         .card-actions {
             display: flex;
@@ -265,6 +271,7 @@
 
             let users = {};
             let charts = {};
+            let predCharts = {};
             let ignoredDevices = new Set();
             let alertThresholds = {
                 warning: 25,
@@ -389,13 +396,17 @@
                 }
 
                 let csvContent = "data:text/csv;charset=utf-8,";
-                csvContent += "Timestamp,CO (PPM),Temperature (C),Humidity (%),Status,Prediction\n";
+                csvContent += "Timestamp (server),Client Timestamp,CO (PPM),Temperature (C),Humidity (%),Status,Prediction\n";
 
                 user.history.forEach(record => {
-                    const timestamp = new Date(record.timestamp).toLocaleString();
+                    const timestamp = record.timestamp ? new Date(record.timestamp).toLocaleString() : '';
+                    // client timestamp may be stored as ISO string in record.client_timestamp
+                    const clientTs = (record.client_timestamp !== undefined && record.client_timestamp !== null)
+                        ? new Date(record.client_timestamp).toLocaleString()
+                        : '';
                     const status = getStatus(record.co);
                     const prediction = (record.prediction !== undefined && record.prediction !== null) ? record.prediction.toFixed(2) : "N/A";
-                    const row = [timestamp, record.co, record.temp, record.humidity, status, prediction].join(",");
+                    const row = [timestamp, clientTs, record.co, record.temp, record.humidity, status, prediction].join(",");
                     csvContent += row + "\n";
                 });
 
@@ -438,9 +449,15 @@
                     <div class="prediction-display">
                         Prediction: <span data-value="prediction_text">N/A</span>
                         <div class="prediction-info">Prediction (Next 30m - 1hr)</div>
+                        <div class="prediction-info">Client time: <span data-value="client_timestamp">—</span></div>
                     </div>
                     <div class="chart-container">
+                        <div class="chart-title">CO (PPM) - Raw Readings</div>
                         <canvas id="chart-${user.id}"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-title">Predicted CO</div>
+                        <canvas id="chart-pred-${user.id}"></canvas>
                     </div>
                     <div class="card-actions">
                         <button class="btn-secondary rename-btn">Rename</button>
@@ -456,6 +473,7 @@
                 card.querySelector('.delete-btn').addEventListener('click', () => deleteUser(user.deviceId));
 
                 createChart(user);
+                createPredictionChart(user);
             }
 
             function updateUserCard(user) {
@@ -473,6 +491,15 @@
                 } else {
                     predictionText.textContent = "No prediction available";
                     predictionText.classList.add('no-prediction');
+                }
+
+                const clientTsEl = card.querySelector('[data-value="client_timestamp"]');
+                if (user.currentData && user.currentData.client_timestamp) {
+                    try {
+                        clientTsEl.textContent = new Date(user.currentData.client_timestamp).toLocaleString();
+                    } catch (e) { clientTsEl.textContent = user.currentData.client_timestamp; }
+                } else {
+                    clientTsEl.textContent = '—';
                 }
 
                 const status = getStatus(user.currentData.co);
@@ -515,6 +542,41 @@
                 });
             }
 
+            function createPredictionChart(user) {
+                const ctx = document.getElementById(`chart-pred-${user.id}`).getContext('2d');
+                predCharts[user.deviceId] = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Predicted CO (PPM)',
+                            data: [],
+                            borderColor: '#03A9F4',
+                            backgroundColor: 'rgba(3, 169, 244, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            pointRadius: 0
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { color: '#999' },
+                                grid: { color: '#333' }
+                            },
+                            x: {
+                                ticks: { display: false },
+                                grid: { display: false }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+            }
+
             function updateChart(user) {
                 const chart = charts[user.deviceId];
                 if (!chart) return;
@@ -524,13 +586,6 @@
 
                 chart.data.labels = labels;
                 chart.data.datasets[0].data = data;
-                
-                const pointRadii = user.history.map(d => (d.prediction !== undefined && d.prediction !== null) ? 5 : 0);
-                const pointColors = user.history.map(d => (d.prediction !== undefined && d.prediction !== null) ? 'rgba(255, 99, 132, 1)' : 'rgba(0, 0, 0, 0)');
-                
-                chart.data.datasets[0].pointRadius = pointRadii;
-                chart.data.datasets[0].pointBackgroundColor = pointColors;
-                chart.data.datasets[0].pointBorderColor = pointColors;
 
                 const status = getStatus(user.currentData.co);
                 let borderColor = '#4CAF50'; // Normal
@@ -538,6 +593,18 @@
                 if (status === 'danger') borderColor = '#F44336';
                 chart.data.datasets[0].borderColor = borderColor;
                 
+                chart.update('none');
+            }
+
+            function updatePredictionChart(user) {
+                const chart = predCharts[user.deviceId];
+                if (!chart) return;
+
+                const labels = user.history.map(d => new Date(d.timestamp).toLocaleTimeString());
+                const data = user.history.map(d => (d.prediction !== undefined && d.prediction !== null) ? d.prediction : null);
+
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = data;
                 chart.update('none');
             }
 
@@ -616,6 +683,7 @@
                     temp: sensorData.temp,
                     humidity: sensorData.humidity,
                     timestamp: sensorData.timestamp,
+                    client_timestamp: sensorData.client_timestamp || null,
                     prediction: predictedValue
                 };
                 user.currentData = newData;
@@ -625,6 +693,7 @@
                 }
                 updateUserCard(user);
                 updateChart(user);
+                updatePredictionChart(user);
             }
 
             const usersRef = database.ref('users');
