@@ -448,7 +448,7 @@
                     </div>
                     <div class="prediction-display">
                         Prediction: <span data-value="prediction_text">N/A</span>
-                        <div class="prediction-info">Prediction (Next 30m - 1hr)</div>
+                        <div class="prediction-info">Short-term prediction (next step)</div>
                         <div class="prediction-info">Client time: <span data-value="client_timestamp">—</span></div>
                     </div>
                     <div class="chart-container">
@@ -662,13 +662,14 @@
                     database.ref('users/' + deviceId).set({ name: deviceId, deviceId: deviceId });
                 }
 
-                // Normalize incoming prediction field names. The ESP32 sketch writes
-                // `co_pred_1h` (1-hour prediction). Older or other senders may use
-                // `prediction`. Prefer `co_pred_1h` when present.
-                const predictedRaw = (sensorData && sensorData.co_pred_1h !== undefined && sensorData.co_pred_1h !== null)
-                    ? sensorData.co_pred_1h
-                    : (sensorData && sensorData.prediction !== undefined && sensorData.prediction !== null)
-                        ? sensorData.prediction
+                // Normalize incoming prediction field names.
+                // Mobile app writes both: `prediction` (short-term) and optionally
+                // `co_pred_30m` / `co_pred_1h`.
+                // To match Android UI, show the short-term `prediction` by default.
+                const predictedRaw = (sensorData && sensorData.prediction !== undefined && sensorData.prediction !== null)
+                    ? sensorData.prediction
+                    : (sensorData && sensorData.co_pred_1h !== undefined && sensorData.co_pred_1h !== null)
+                        ? sensorData.co_pred_1h
                         : null;
 
                 // Coerce to number when possible; otherwise use null to indicate no prediction
