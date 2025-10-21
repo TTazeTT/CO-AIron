@@ -206,6 +206,31 @@
             color: #888;
             font-style: italic;
         }
+        .backups {
+            margin-top: 12px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-color);
+        }
+        .backups-list {
+            list-style: none;
+            padding-left: 0;
+            margin: 8px 0 0 0;
+        }
+        .backups-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px dashed #333;
+            font-size: 0.9rem;
+        }
+        .backups-list li a {
+            color: var(--secondary-color);
+            text-decoration: none;
+        }
+        .backups-list li a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -273,6 +298,7 @@
             let charts = {};
             let predCharts = {};
             let ignoredDevices = new Set();
+            let backupRefs = {};
             let alertThresholds = {
                 warning: 25,
                 danger: 50
@@ -369,6 +395,14 @@
                     try { charts[deviceId].destroy(); } catch (e) {}
                     delete charts[deviceId];
                 }
+                if (predCharts[deviceId]) {
+                    try { predCharts[deviceId].destroy(); } catch (e) {}
+                    delete predCharts[deviceId];
+                }
+                if (backupRefs[deviceId]) {
+                    try { backupRefs[deviceId].off(); } catch (e) {}
+                    delete backupRefs[deviceId];
+                }
 
                 // Add to ignored list so incoming data won't auto-create the card
                 ignoredDevices.add(deviceId);
@@ -396,24 +430,20 @@
                 }
 
                 let csvContent = "data:text/csv;charset=utf-8,";
-                csvContent += "Timestamp (server),Client Timestamp,CO (PPM),Temperature (C),Humidity (%),Status,Prediction\n";
+                csvContent += "Timestamp (Date and Time),CO Raw Data,Temp Raw Data,Humidity Raw Data\n";
 
                 user.history.forEach(record => {
-                    const timestamp = record.timestamp ? new Date(record.timestamp).toLocaleString() : '';
-                    // client timestamp may be stored as ISO string in record.client_timestamp
-                    const clientTs = (record.client_timestamp !== undefined && record.client_timestamp !== null)
-                        ? new Date(record.client_timestamp).toLocaleString()
-                        : '';
-                    const status = getStatus(record.co);
-                    const prediction = (record.prediction !== undefined && record.prediction !== null) ? record.prediction.toFixed(2) : "N/A";
-                    const row = [timestamp, clientTs, record.co, record.temp, record.humidity, status, prediction].join(",");
+                    // Prefer client timestamp if present; fallback to server timestamp
+                    const ts = record.client_timestamp || record.timestamp || '';
+                    const tsStr = ts ? new Date(ts).toISOString() : '';
+                    const row = [tsStr, record.co, record.temp, record.humidity].join(",");
                     csvContent += row + "\n";
                 });
 
                 const encodedUri = encodeURI(csvContent);
                 const link = document.createElement("a");
                 link.setAttribute("href", encodedUri);
-                link.setAttribute("download", `${user.name}_sensor_history.csv`);
+                link.setAttribute("download", `${user.deviceId}_history.csv`);
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -464,6 +494,10 @@
                         <button class="btn-primary export-btn">Export CSV</button>
                         <button class="btn-secondary delete-btn">Delete</button>
                     </div>
+                    <div class="backups">
+                        <div class="chart-title">Backups</div>
+                        <ul id="backups-${user.id}" class="backups-list"></ul>
+                    </div>
                 `;
 
                 userDashboard.appendChild(card);
@@ -474,6 +508,7 @@
 
                 createChart(user);
                 createPredictionChart(user);
+                observeBackups(user);
             }
 
             function updateUserCard(user) {
@@ -606,6 +641,28 @@
                 chart.data.labels = labels;
                 chart.data.datasets[0].data = data;
                 chart.update('none');
+            }
+
+            function observeBackups(user) {
+                const ref = database.ref('backups/' + user.deviceId).limitToLast(10);
+                backupRefs[user.deviceId] = ref;
+                const el = document.getElementById(`backups-${user.id}`);
+                const render = (snapshot) => {
+                    if (!el) return;
+                    const val = snapshot.val() || {};
+                    // val is an object keyed by timestamp ISO -> meta
+                    const entries = Object.entries(val)
+                        .map(([k, v]) => ({ key: k, meta: v }))
+                        .sort((a, b) => (a.key < b.key ? 1 : -1)); // newest first
+                    el.innerHTML = entries.map(({ key, meta }) => {
+                        const name = meta.name || 'backup.csv';
+                        const link = meta.webContentLink || meta.webViewLink || '#';
+                        const when = new Date(meta.createdTime || key).toLocaleString();
+                        const size = meta.size ? ` (${meta.size} bytes)` : '';
+                        return `<li><span>${name}${size}</span><a href="${link}" target="_blank" rel="noopener">Download</a></li>`;
+                    }).join('');
+                };
+                ref.on('value', render);
             }
 
             // --- Event Listeners ---
