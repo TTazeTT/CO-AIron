@@ -331,7 +331,6 @@
             let charts = {};
             let predCharts = {};
             let ignoredDevices = new Set();
-            let backupRefs = {};
             let alertThresholds = {
                 warning: 25,
                 danger: 50
@@ -455,32 +454,7 @@
                 return 'normal';
             }
 
-            function exportToCSV(deviceId) {
-                const user = users[deviceId];
-                if (!user || user.history.length === 0) {
-                    alert('No data to export.');
-                    return;
-                }
-
-                let csvContent = "data:text/csv;charset=utf-8,";
-                csvContent += "Timestamp (Date and Time),CO Raw Data,Temp Raw Data,Humidity Raw Data\n";
-
-                user.history.forEach(record => {
-                    // Prefer client timestamp if present; fallback to server timestamp
-                    const ts = record.client_timestamp || record.timestamp || '';
-                    const tsStr = ts ? new Date(ts).toISOString() : '';
-                    const row = [tsStr, record.co, record.temp, record.humidity].join(",");
-                    csvContent += row + "\n";
-                });
-
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                link.setAttribute("download", `${user.deviceId}_history.csv`);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            }
+            // Export CSV functionality removed.
 
             // --- Rendering ---
             function renderUserCard(user) {
@@ -524,47 +498,18 @@
                     </div>
                     <div class="card-actions">
                         <button class="btn-secondary rename-btn">Rename</button>
-                        <button class="btn-primary export-btn">Export CSV</button>
                         <button class="btn-secondary delete-btn">Delete</button>
-                        <button class="btn-secondary benchmark-toggle-btn" title="Toggle Benchmark">Benchmark</button>
-                    </div>
-                    <div class="benchmark-panel" id="benchmark-${user.id}">
-                        <div class="benchmark-controls">
-                            <div>
-                                <div class="chart-title">Benchmark Options</div>
-                                <label><input type="checkbox" class="bm-hz" value="5" checked> 5 min</label>
-                                <label style="margin-left:8px;"><input type="checkbox" class="bm-hz" value="30" checked> 30 min</label>
-                                <label style="margin-left:8px;"><input type="checkbox" class="bm-hz" value="60" checked> 1 hour</label>
-                                <div style="margin-top:6px; font-size:0.85rem; color:#aaa;">Dataset: Latest backup CSV</div>
-                            </div>
-                            <div>
-                                <button class="btn-primary run-benchmark-btn">Run Benchmark</button>
-                            </div>
-                        </div>
-                        <div class="benchmark-results" id="benchmark-results-${user.id}">Toggle to run a benchmark on the latest backup.</div>
-                    </div>
-                    <div class="backups">
-                        <div class="chart-title">Backups</div>
-                        <ul id="backups-${user.id}" class="backups-list"></ul>
-                    </div>
-                    <div class="benchmarks">
-                        <div class="chart-title">Benchmarks</div>
-                        <ul id="benchmarks-${user.id}" class="backups-list"></ul>
                     </div>
                 `;
 
                 userDashboard.appendChild(card);
                 
                 card.querySelector('.rename-btn').addEventListener('click', () => renameUser(user.deviceId));
-                card.querySelector('.export-btn').addEventListener('click', () => exportToCSV(user.deviceId));
                 card.querySelector('.delete-btn').addEventListener('click', () => deleteUser(user.deviceId));
-                card.querySelector('.benchmark-toggle-btn').addEventListener('click', () => toggleBenchmarkPanel(user.deviceId));
-                card.querySelector('.run-benchmark-btn').addEventListener('click', () => runBenchmark(user.deviceId));
 
                 createChart(user);
                 createPredictionChart(user);
-                observeBackups(user);
-                observeBenchmarks(user);
+                // Backups and benchmarks removed.
             }
 
             function updateUserCard(user) {
@@ -699,231 +644,10 @@
                 chart.update('none');
             }
 
-            function observeBackups(user) {
-                const ref = database.ref('backups/' + user.deviceId).limitToLast(10);
-                backupRefs[user.deviceId] = ref;
-                const el = document.getElementById(`backups-${user.id}`);
-                const render = (snapshot) => {
-                    if (!el) return;
-                    const val = snapshot.val() || {};
-                    // val is an object keyed by timestamp ISO -> meta
-                    const entries = Object.entries(val)
-                        .map(([k, v]) => ({ key: k, meta: v }))
-                        .sort((a, b) => (a.key < b.key ? 1 : -1)); // newest first
-                    el.innerHTML = entries.map(({ key, meta }) => {
-                        const name = meta.name || 'backup.csv';
-                        const link = meta.downloadUrl || meta.webContentLink || meta.webViewLink || '#';
-                        const when = new Date(meta.createdTime || key).toLocaleString();
-                        const size = meta.size ? ` (${meta.size} bytes)` : '';
-                        return `<li><span>${name}${size}</span><a href="${link}" target="_blank" rel="noopener">Download</a></li>`;
-                    }).join('');
-                };
-                ref.on('value', render);
-            }
-
-            function observeBenchmarks(user) {
-                const ref = database.ref('benchmarks/' + user.deviceId).limitToLast(10);
-                const el = document.getElementById(`benchmarks-${user.id}`);
-                const render = (snapshot) => {
-                    if (!el) return;
-                    const val = snapshot.val() || {};
-                    const entries = Object.entries(val)
-                        .map(([k, v]) => ({ key: k, meta: v }))
-                        .sort((a, b) => (a.key < b.key ? 1 : -1));
-                    el.innerHTML = entries.map(({ key, meta }) => {
-                        const name = meta.name || 'benchmark.csv';
-                        const link = meta.downloadUrl || '#';
-                        const when = new Date(meta.createdTime || key).toLocaleString();
-                        const size = meta.size ? ` (${meta.size} bytes)` : '';
-                        const summary = meta.summary ? ` — MAE: ${Number(meta.summary.MAE).toFixed(2)}, RMSE: ${Number(meta.summary.RMSE).toFixed(2)}, MAPE: ${Number(meta.summary.MAPE).toFixed(1)}%` : '';
-                        return `<li><span>${when} — ${name}${size}${summary}</span><a href="${link}" target="_blank" rel="noopener">Download</a></li>`;
-                    }).join('');
-                };
-                ref.on('value', render);
-            }
+            // Backups and benchmarks observers removed.
 
             // --- Benchmarking ---
-            function toggleBenchmarkPanel(deviceId) {
-                const user = users[deviceId];
-                if (!user) return;
-                const panel = document.getElementById(`benchmark-${user.id}`);
-                if (!panel) return;
-                panel.classList.toggle('active');
-            }
-
-            async function runBenchmark(deviceId) {
-                try {
-                    const user = users[deviceId];
-                    if (!user) return;
-                    const panel = document.getElementById(`benchmark-${user.id}`);
-                    const resultsEl = document.getElementById(`benchmark-results-${user.id}`);
-                    if (resultsEl) { resultsEl.textContent = 'Preparing benchmark…'; }
-
-                    // Get selected horizons
-                    const hzEls = panel ? panel.querySelectorAll('.bm-hz:checked') : [];
-                    const horizonsMin = Array.from(hzEls).map(el => parseInt(el.value, 10));
-                    if (horizonsMin.length === 0) horizonsMin.push(5);
-
-                    const csv = await fetchLatestBackupCsv(deviceId);
-                    if (!csv) {
-                        if (resultsEl) resultsEl.textContent = 'No backup found for this device. Create a backup first.';
-                        return;
-                    }
-                    const rows = parseBackupCsv(csv);
-                    if (rows.length < 40) {
-                        if (resultsEl) resultsEl.textContent = 'Not enough rows to run benchmark (need at least 40).';
-                        return;
-                    }
-
-                    // Evaluate walk-forward linear regression
-                    const { summary, detailedCsv } = evaluateBenchmark(rows, horizonsMin);
-                    if (resultsEl) {
-                        resultsEl.innerHTML = `
-                            <div><strong>Summary</strong></div>
-                            <div>Samples: ${summary.count}</div>
-                            <div>MAE: ${summary.MAE.toFixed(2)} PPM</div>
-                            <div>RMSE: ${summary.RMSE.toFixed(2)} PPM</div>
-                            <div>MAPE: ${summary.MAPE.toFixed(1)}%</div>
-                            <div style="margin-top:8px;">Uploading results…</div>
-                        `;
-                    }
-
-                    const nowIso = new Date().toISOString();
-                    const filename = `${deviceId}_${nowIso.replace(/[:]/g, '-')}_benchmark.csv`;
-                    const blob = new Blob([detailedCsv], { type: 'text/csv;charset=utf-8' });
-                    const { downloadUrl, size } = await uploadBenchmarkCsv(deviceId, filename, blob);
-
-                    // Write metadata with summary
-                    await writeBenchmarkMetadata(deviceId, nowIso, {
-                        name: filename,
-                        size: size,
-                        createdTime: nowIso,
-                        downloadUrl: downloadUrl,
-                        summary: summary
-                    });
-
-                    if (resultsEl) {
-                        resultsEl.innerHTML += `<div>Done. <a href="${downloadUrl}" target="_blank" rel="noopener">Download CSV</a></div>`;
-                    }
-                } catch (err) {
-                    console.error('Benchmark failed', err);
-                    alert('Benchmark failed: ' + (err && err.message ? err.message : err));
-                }
-            }
-
-            async function fetchLatestBackupCsv(deviceId) {
-                // Get latest backup metadata
-                const snap = await database.ref('backups/' + deviceId).limitToLast(1).get();
-                if (!snap.exists()) return null;
-                const obj = snap.val();
-                const key = Object.keys(obj).sort((a,b) => (a < b ? 1 : -1))[0];
-                const meta = obj[key];
-                const url = meta.downloadUrl || meta.webContentLink || meta.webViewLink;
-                if (!url) return null;
-                const resp = await fetch(url);
-                if (!resp.ok) throw new Error('Failed to download CSV: HTTP ' + resp.status);
-                return await resp.text();
-            }
-
-            function parseBackupCsv(csvText) {
-                const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
-                if (lines.length < 2) return [];
-                const header = lines[0].split(',').map(s => s.trim());
-                const tsIdx = header.findIndex(h => /timestamp/i.test(h));
-                let coIdx = header.findIndex(h => /CO\s*Raw/i.test(h));
-                if (coIdx === -1) coIdx = header.findIndex(h => /CO/i.test(h));
-                const rows = [];
-                for (let i = 1; i < lines.length; i++) {
-                    const parts = lines[i].split(',');
-                    if (parts.length < 2) continue;
-                    const ts = parts[tsIdx] ? Date.parse(parts[tsIdx]) : NaN;
-                    const co = parseFloat(parts[coIdx]);
-                    if (!isNaN(ts) && !isNaN(co)) {
-                        rows.push({ timestamp: ts, co });
-                    }
-                }
-                rows.sort((a,b) => a.timestamp - b.timestamp);
-                return rows;
-            }
-
-            function linearRegressionCoeffs(points) {
-                const n = points.length;
-                if (n < 2) return { m: 0, b: points[0] ? points[0].y : 0 };
-                let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-                for (const p of points) {
-                    sumX += p.x; sumY += p.y; sumXY += p.x * p.y; sumXX += p.x * p.x;
-                }
-                const denom = (n * sumXX - sumX * sumX);
-                if (denom === 0) return { m: 0, b: sumY / n };
-                const m = (n * sumXY - sumX * sumY) / denom;
-                const b = (sumY - m * sumX) / n;
-                return { m, b };
-            }
-
-            function evaluateBenchmark(rows, horizonsMin) {
-                const minTrain = 20;
-                const results = [];
-                const msPerMin = 60 * 1000;
-                const xs = rows.map(r => r.timestamp);
-                const ys = rows.map(r => r.co);
-                for (let i = minTrain; i < rows.length - 1; i++) {
-                    const train = [];
-                    for (let j = 0; j < i; j++) {
-                        train.push({ x: xs[j], y: ys[j] });
-                    }
-                    const { m, b } = linearRegressionCoeffs(train);
-                    for (const hz of horizonsMin) {
-                        const targetTs = xs[i] + hz * msPerMin;
-                        let k = i + 1;
-                        while (k < rows.length && xs[k] < targetTs) k++;
-                        if (k >= rows.length) continue;
-                        const yTrue = ys[k];
-                        const yPred = m * targetTs + b;
-                        const err = yPred - yTrue;
-                        const absErr = Math.abs(err);
-                        const sqErr = err * err;
-                        const ape = yTrue !== 0 ? Math.abs(err / yTrue) * 100 : 0;
-                        results.push({
-                            timestamp: new Date(xs[k]).toISOString(),
-                            horizonMin: hz,
-                            y_true: yTrue,
-                            y_pred: yPred,
-                            abs_error: absErr,
-                            sq_error: sqErr,
-                            ape: ape
-                        });
-                    }
-                }
-                const count = results.length;
-                const mae = count ? results.reduce((s, r) => s + r.abs_error, 0) / count : 0;
-                const rmse = count ? Math.sqrt(results.reduce((s, r) => s + r.sq_error, 0) / count) : 0;
-                const mape = count ? (results.reduce((s, r) => s + r.ape, 0) / count) : 0;
-                const header = 'timestamp_iso,horizon_min,y_true,y_pred,abs_error,sq_error,ape_percent\n';
-                const body = results.map(r => [r.timestamp, r.horizonMin, r.y_true, r.y_pred, r.abs_error, r.sq_error, r.ape].join(',')).join('\n');
-                return {
-                    summary: { count, MAE: mae, RMSE: rmse, MAPE: mape },
-                    detailedCsv: header + body + '\n'
-                };
-            }
-
-            function resolveStorageRootRef() {
-                const projectId = firebase.app().options.projectId;
-                return firebase.storage().refFromURL(`gs://${projectId}.appspot.com`);
-            }
-
-            async function uploadBenchmarkCsv(deviceId, filename, blob) {
-                try { await firebase.auth().signInAnonymously(); } catch (e) { /* ignore */ }
-                const rootRef = resolveStorageRootRef();
-                const path = `benchmarks/${deviceId}/${filename}`;
-                const fileRef = rootRef.child(path);
-                const task = await fileRef.put(blob, { contentType: 'text/csv' });
-                const downloadUrl = await task.ref.getDownloadURL();
-                return { downloadUrl, size: blob.size };
-            }
-
-            async function writeBenchmarkMetadata(deviceId, keyIso, meta) {
-                await database.ref('benchmarks/' + deviceId + '/' + keyIso).set(meta);
-            }
+            // Benchmarking utilities removed.
 
             // --- Event Listeners ---
             
