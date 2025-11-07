@@ -431,10 +431,6 @@
                     try { predCharts[deviceId].destroy(); } catch (e) {}
                     delete predCharts[deviceId];
                 }
-                if (backupRefs[deviceId]) {
-                    try { backupRefs[deviceId].off(); } catch (e) {}
-                    delete backupRefs[deviceId];
-                }
 
                 // Add to ignored list so incoming data won't auto-create the card
                 ignoredDevices.add(deviceId);
@@ -499,6 +495,7 @@
                     <div class="card-actions">
                         <button class="btn-secondary rename-btn">Rename</button>
                         <button class="btn-secondary delete-btn">Delete</button>
+                        <button class="btn-secondary download-backup-btn">Download Backup</button>
                     </div>
                 `;
 
@@ -506,6 +503,7 @@
                 
                 card.querySelector('.rename-btn').addEventListener('click', () => renameUser(user.deviceId));
                 card.querySelector('.delete-btn').addEventListener('click', () => deleteUser(user.deviceId));
+                card.querySelector('.download-backup-btn').addEventListener('click', () => downloadLatestBackup(user.deviceId));
 
                 createChart(user);
                 createPredictionChart(user);
@@ -645,6 +643,29 @@
             }
 
             // Backups and benchmarks observers removed.
+
+            // --- Backups: Download latest backup ---
+            async function downloadLatestBackup(deviceId) {
+                try {
+                    const snap = await database.ref('backups/' + deviceId).limitToLast(1).get();
+                    if (!snap.exists()) {
+                        alert('No backup found for this device.');
+                        return;
+                    }
+                    const obj = snap.val();
+                    const key = Object.keys(obj).sort((a,b) => (a < b ? 1 : -1))[0];
+                    const meta = obj[key] || {};
+                    const url = meta.downloadUrl || meta.webContentLink || meta.webViewLink;
+                    if (!url) {
+                        alert('Backup metadata found but no downloadable URL was provided.');
+                        return;
+                    }
+                    window.open(url, '_blank', 'noopener');
+                } catch (err) {
+                    console.error('Failed to download backup:', err);
+                    alert('Failed to download backup: ' + (err && err.message ? err.message : err));
+                }
+            }
 
             // --- Benchmarking ---
             // Benchmarking utilities removed.
