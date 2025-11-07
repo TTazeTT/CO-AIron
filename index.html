@@ -194,31 +194,6 @@
             display: flex;
             gap: 12px;
         }
-        .benchmark-panel {
-            display: none;
-            margin-top: 12px;
-            padding: 12px;
-            background-color: #151515;
-            border: 1px dashed var(--border-color);
-            border-radius: 6px;
-        }
-        .benchmark-panel.active { display: block; }
-        .benchmark-controls {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 12px;
-            align-items: center;
-        }
-        .benchmark-results {
-            margin-top: 8px;
-            font-size: 0.9rem;
-            line-height: 1.4;
-        }
-        .benchmarks {
-            margin-top: 12px;
-            padding-top: 8px;
-            border-top: 1px solid var(--border-color);
-        }
         .prediction-display {
             text-align: center;
             margin-bottom: 16px;
@@ -235,31 +210,7 @@
             color: #888;
             font-style: italic;
         }
-        .backups {
-            margin-top: 12px;
-            padding-top: 8px;
-            border-top: 1px solid var(--border-color);
-        }
-        .backups-list {
-            list-style: none;
-            padding-left: 0;
-            margin: 8px 0 0 0;
-        }
-        .backups-list li {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 0;
-            border-bottom: 1px dashed #333;
-            font-size: 0.9rem;
-        }
-        .backups-list li a {
-            color: var(--secondary-color);
-            text-decoration: none;
-        }
-        .backups-list li a:hover {
-            text-decoration: underline;
-        }
+        /* Removed benchmark/backups CSS to simplify the page */
     </style>
 </head>
 <body>
@@ -644,20 +595,47 @@
 
             // Backups and benchmarks observers removed.
 
-            // --- Backups: Download latest backup ---
+            // --- Backups: Download latest backup from Firebase Storage ---
             async function downloadLatestBackup(deviceId) {
                 try {
-                    const snap = await database.ref('backups/' + deviceId).limitToLast(1).get();
-                    if (!snap.exists()) {
+                    try { await firebase.auth().signInAnonymously(); } catch (e) { /* ignore */ }
+                    const bucket = (firebase.app().options && firebase.app().options.storageBucket)
+                        ? firebase.app().options.storageBucket
+                        : 'esp32-weldwell-01.firebasestorage.app';
+                    const rootRef = firebase.storage().refFromURL(`gs://${bucket}`);
+                    // Backups are stored under backups/<deviceId>/
+                    const folderRef = rootRef.child(`backups/${deviceId}`);
+                    const listRes = await folderRef.listAll();
+                    const items = listRes.items || [];
+                    if (items.length === 0) {
                         alert('No backup found for this device.');
                         return;
                     }
-                    const obj = snap.val();
-                    const key = Object.keys(obj).sort((a,b) => (a < b ? 1 : -1))[0];
-                    const meta = obj[key] || {};
-                    const url = meta.downloadUrl || meta.webContentLink || meta.webViewLink;
+
+                    // If multiple files, pick the most recently updated using metadata when possible.
+                    let targetRef = items[0];
+                    if (items.length > 1) {
+                        try {
+                            const metas = await Promise.all(items.map(async (ref) => {
+                                try { return await ref.getMetadata(); } catch (_) { return null; }
+                            }));
+                            // Pair refs with their updated time
+                            const pairs = items.map((ref, i) => ({ ref, meta: metas[i] }));
+                            pairs.sort((a, b) => {
+                                const at = a.meta && (a.meta.updated || a.meta.timeCreated) ? Date.parse(a.meta.updated || a.meta.timeCreated) : 0;
+                                const bt = b.meta && (b.meta.updated || b.meta.timeCreated) ? Date.parse(b.meta.updated || b.meta.timeCreated) : 0;
+                                return bt - at; // newest first
+                            });
+                            targetRef = (pairs[0] && pairs[0].ref) ? pairs[0].ref : items[items.length - 1];
+                        } catch (_) {
+                            // Fallback: choose the last item by name ordering
+                            targetRef = items.sort((a, b) => a.name.localeCompare(b.name))[items.length - 1];
+                        }
+                    }
+
+                    const url = await targetRef.getDownloadURL();
                     if (!url) {
-                        alert('Backup metadata found but no downloadable URL was provided.');
+                        alert('Could not obtain a download URL for the backup file.');
                         return;
                     }
                     window.open(url, '_blank', 'noopener');
